@@ -46,6 +46,9 @@ re_cell_2 = re.compile("'cell://.*?'")   # same, but with single quotes
 # Matches script blocks.
 re_script = re.compile(r'<script[^>]*?>.*?</script>', re.DOTALL | re.I)
 
+# regexp for %-directives
+directive_re = re.compile(r"^%\s*(\w+)(\s+(\S.*))?")
+
 # Whether to enable editing of :class:`TextCell`s with TinyMCE.
 JEDITABLE_TINYMCE = True
 
@@ -1430,34 +1433,66 @@ class Cell(Cell_generic):
             u'%pi+3'
             sage: C.percent_directives()
             [u'hide', u'maxima']
+            sage: C._system
+            u'maxima'
+
+        Test the one-line syntax::
+
+            sage: C = sagenb.notebook.cell.Cell(0, '% hide\n% var  x, y', '5', None)
+            sage: C.parse_percent_directives()
+            u'x, y'
+            sage: C.percent_directives()
+            [u'hide', u'var']
+            sage: C._system
+            u'var'
+
+        Trivial cases::
+
+            sage: C = sagenb.notebook.cell.Cell(0, "", '5', None)
+            sage: C.parse_percent_directives()
+            u''
+            sage: C = sagenb.notebook.cell.Cell(0, "42", '5', None)
+            sage: C.parse_percent_directives()
+            u'42'
         """
         self._system = None
         text = self.input_text().splitlines()
+        if not text:
+            return u""
+
+        pre = []
         directives = []
-        i = 0
+
         for i, line in enumerate(text):
-            line = line.strip()
-            if not line.startswith('%'):
-                #Handle the #auto case here for now
+            m = directive_re.match(line)
+            if m is None:
+                # Handle the #auto case here for now
                 if line == "#auto":
-                    directives.append(line[1:])
-                else:
-                    break
-            elif line in ['%auto', '%hide', '%hideall', '%save_server',
-                          '%time', '%timeit']:
+                    directives.append("auto")
+                    continue
+                break
+
+            directive = m.group(1)
+            oneliner = m.group(3)
+
+            directives.append(directive)
+
+            abort = False
+            if oneliner is not None:
+                pre = [oneliner]
+                abort = True
+            if directive not in ['auto', 'hide', 'hideall', 'save_server',
+                                 'time', 'timeit']:
                 # We do not consider any of the above percent
                 # directives as specifying a system.
-                directives.append(line[1:])
-            else:
-                self._system = line[1:]
-                directives.append(line[1:])
+                self._system = directive
+                abort = True
+            if abort:
                 i += 1
                 break
 
         self._percent_directives = directives
-        if not self._system == 'fortran':
-            return "\n".join(text[i:]).strip()
-        return "\n".join(text[i:]).rstrip()
+        return "\n".join(pre + text[i:]).rstrip()
 
     def percent_directives(self):
         r"""

@@ -396,7 +396,7 @@ def tabulate(v, width=90, ncols=3):
     return s
 
 def syseval(system, cmd, dir=None):
-    """
+    r"""
     Evaluate an input with a "system" object that can evaluate inputs
     (e.g., python, gap).
 
@@ -417,75 +417,47 @@ def syseval(system, cmd, dir=None):
                   
     EXAMPLES::
 
+        sage: from sagenb.misc.support import syseval
         sage: from sage.misc.python import python
-        sage: sagenb.misc.support.syseval(python, '2+4/3')
+        sage: syseval(python, '2+4/3')
         3
         ''
-        sage: sagenb.misc.support.syseval(python, 'import os; os.chdir(".")')
+        sage: syseval(python, 'import os; os.chdir(".")')
         ''
-        sage: sagenb.misc.support.syseval(python, 'import os; os.chdir(1,2,3)')
+        sage: syseval(python, 'import os; os.chdir(1,2,3)')
         Traceback (most recent call last):
         ...
         TypeError: chdir() takes exactly 1 argument (3 given)
-        sage: sagenb.misc.support.syseval(gap, "2+3")
+        sage: syseval(gap, "2+3")
         '5'
+
+    Test ``%cython``, see https://github.com/sagemath/sagenb/issues/260::
+
+        sage: from sage.all import cython
+        sage: syseval(cython, r'''
+        ....: from libc.stdio cimport printf
+        ....: printf("Hello World\n")
+        ....: ''')
+        Hello World
+        ''
     """
+    if isinstance(cmd, unicode):
+        cmd = cmd.encode('utf-8', 'ignore')
+
+    try:
+        ev = system.eval
+    except AttributeError:
+        # Whatever we return will be printed.  Therefore, we change a
+        # return value of None to the empty string which is invisible.
+        ret = system(cmd)
+        if ret is None:
+            ret = ""
+        return ret
+
     if dir:
         if hasattr(system.__class__, 'chdir'):
             system.chdir(dir)
-    if isinstance(cmd, unicode):
-        cmd = cmd.encode('utf-8', 'ignore')
-    return system.eval(cmd, sage_globals, locals = sage_globals)
-
-######################################################################
-# Cython
-######################################################################
-def cython_import(filename, verbose=False, compile_message=False,
-                 use_cache=False, create_local_c_file=True):
-    """
-    Compile a file containing Cython code, then import and return the
-    module.  Raises an ``ImportError`` if anything goes wrong.
-
-    INPUT:
-    
-    - ``filename`` - a string; name of a file that contains Cython
-      code
-    
-    OUTPUT:
-    
-    - the module that contains the compiled Cython code.
-    """
-    name, build_dir = cython(filename, verbose=verbose,
-                             compile_message=compile_message,
-                                            use_cache=use_cache,
-                                            create_local_c_file=create_local_c_file)
-    sys.path.append(build_dir)
-    return __builtin__.__import__(name)
-
-
-def cython_import_all(filename, globals, verbose=False, compile_message=False,
-                     use_cache=False, create_local_c_file=True):
-    """
-    Imports all non-private (i.e., not beginning with an underscore)
-    attributes of the specified Cython module into the given context.
-    This is similar to::
-
-        from module import *
-
-    Raises an ``ImportError`` exception if anything goes wrong.
-
-    INPUT:
-    
-    - ``filename`` - a string; name of a file that contains Cython
-      code
-    """
-    m = cython_import(filename, verbose=verbose, compile_message=compile_message,
-                     use_cache=use_cache,
-                     create_local_c_file=create_local_c_file)
-    for k, x in m.__dict__.iteritems():
-        if k[0] != '_':
-            globals[k] = x
-            
+    return ev(cmd, sage_globals, locals=sage_globals)
 
 
 ###################################################

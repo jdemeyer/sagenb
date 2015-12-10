@@ -3976,26 +3976,6 @@ except (KeyError, IOError):
             system = self.system()
         return system
 
-    def cython_import(self, cmd, cell):
-        # Choice: Can use either C.relative_id() or
-        # self.next_block_id().  C.relative_id() has the advantage
-        # that block evals are cached, i.e., no need to recompile.  On
-        # the other hand tracebacks don't work if you change a cell
-        # and create a new function in it.  Caching is also annoying
-        # since the linked .c file disappears.
-
-        # TODO: This design will *only* work on local machines -- need
-        # to redesign so works even if compute worksheet process is
-        # remote!
-        id = self.next_block_id()
-        code = os.path.join(self.directory(), 'code')
-        if not os.path.exists(code):
-            os.makedirs(code)
-        spyx = os.path.abspath(os.path.join(code, 'sage%s.spyx'%id))
-        if not (os.path.exists(spyx) and open(spyx).read() == cmd):
-            open(spyx,'w').write(cmd.encode('utf-8', 'ignore'))
-        return '_support_.cython_import_all("%s", globals())'%spyx
-
     def check_for_system_switching(self, input, cell):
         r"""
         Check for input cells that start with ``%foo``, where
@@ -4070,8 +4050,6 @@ except (KeyError, IOError):
         system = self.get_cell_system(cell)
         if system == 'sage':
             return False, input
-        elif system in ['cython', 'pyrex', 'sagex']:
-            return True, self.cython_import(input, cell)
         else:
             cmd = self._eval_cmd(system, input)
             return True, cmd
